@@ -67,25 +67,30 @@ function SamPlates:UpdateNameplateAuras(namePlateFrame)
         local auraData = C_UnitAuras.GetDebuffDataByIndex(unit, i)
         if not auraData or debuffIndex > MAX_DEBUFFS then break end
         
-        local icon = namePlateFrame.debuffIcons[debuffIndex] or self:CreateAuraIcon(namePlateFrame.UnitFrame)
-        namePlateFrame.debuffIcons[debuffIndex] = icon
+        -- Check if the debuff was cast by the player
+        local isPlayerCast = auraData.sourceUnit == "player"
         
-        icon:SetPoint("BOTTOMLEFT", namePlateFrame.UnitFrame, "TOPLEFT", (debuffIndex - 1) * (ICON_SIZE + 2), DEBUFF_ICON_OFFSET_Y)
-        icon.texture:SetTexture(auraData.icon)
-        
-        -- Store expiration time for timer
-        if auraData.duration and auraData.duration > 0 then
-            icon.expirationTime = auraData.expirationTime
-            local remaining = math.max(auraData.expirationTime - GetTime(), 0)
-            icon.timer:SetText(string.format("%.1f", remaining))
-            icon.timer:Show()
-        else
-            icon.expirationTime = nil
-            icon.timer:Hide()
+        if isPlayerCast then
+            local icon = namePlateFrame.debuffIcons[debuffIndex] or self:CreateAuraIcon(namePlateFrame.UnitFrame)
+            namePlateFrame.debuffIcons[debuffIndex] = icon
+            
+            icon:SetPoint("BOTTOMLEFT", namePlateFrame.UnitFrame, "TOPLEFT", (debuffIndex - 1) * (ICON_SIZE + 2), DEBUFF_ICON_OFFSET_Y)
+            icon.texture:SetTexture(auraData.icon)
+            
+            -- Store expiration time for timer
+            if auraData.duration and auraData.duration > 0 then
+                icon.expirationTime = auraData.expirationTime
+                local remaining = math.max(auraData.expirationTime - GetTime(), 0)
+                icon.timer:SetText(string.format("%.1f", remaining))
+                icon.timer:Show()
+            else
+                icon.expirationTime = nil
+                icon.timer:Hide()
+            end
+            
+            icon:Show()
+            debuffIndex = debuffIndex + 1
         end
-        
-        icon:Show()
-        debuffIndex = debuffIndex + 1
     end
     
     -- Hide unused debuff icons
