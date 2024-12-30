@@ -8,22 +8,23 @@ local DEBUFF_ICON_OFFSET_Y = -5
 local MAX_DEBUFFS = 10
 local UPDATE_INTERVAL = 0.1  -- Update timers every 0.1 seconds
     
-function SamPlates:ARENA_PREPARE_START()
-    -- Loop through all nameplates and reset debuff icons
-    for _, namePlate in ipairs(C_NamePlate.GetNamePlates()) do
-        if namePlate.UnitFrame and namePlate.UnitFrame.BuffFrame then
-            namePlate.UnitFrame.BuffFrame:Hide()
+function SamPlates:InitializeHooks()
+    -- Hook the default nameplate creation
+    hooksecurefunc("DefaultCompactNamePlateFrameAnchor", function(frame)
+        if frame and frame.BuffFrame then
+            frame.BuffFrame:Hide()
+            frame.BuffFrame:SetAlpha(0)
         end
-        -- Reset debuff icons
-        if namePlate.debuffIcons then
-            for _, icon in ipairs(namePlate.debuffIcons) do
-                icon:Hide()
-            end
+    end)
+    
+    -- Hook the default aura update function
+    hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
+        if frame and frame.BuffFrame then
+            frame.BuffFrame:Hide()
+            frame.BuffFrame:SetAlpha(0)
         end
-    end
-end
+    end)
 
-function SamPlates:ArenaNumbers(self) 
     hooksecurefunc("CompactUnitFrame_UpdateName", function(frame)
         if C_PvP.IsArena() and frame.unit and frame.unit:find("nameplate") then
             for i = 1, 5 do
@@ -37,6 +38,20 @@ function SamPlates:ArenaNumbers(self)
             end
         end
     end)
+end
+
+function SamPlates:ARENA_PREPARE_START()
+    for _, namePlate in ipairs(C_NamePlate.GetNamePlates()) do
+        if namePlate.UnitFrame and namePlate.UnitFrame.BuffFrame then
+            namePlate.UnitFrame.BuffFrame:Hide()
+        end
+        -- Reset debuff icons
+        if namePlate.debuffIcons then
+            for _, icon in ipairs(namePlate.debuffIcons) do
+                icon:Hide()
+            end
+        end
+    end
 end
 
 -- Create icon pool
@@ -175,16 +190,12 @@ end
 
 -- Addon initialization
 function SamPlates:OnEnable()
-    -- Register events
-    self:RegisterEvent("PLAYER_LOGIN", "ArenaNumbers")
     self:RegisterEvent("NAME_PLATE_UNIT_ADDED")
-    self:RegisterEvent("UNIT_AURA")
-    
-    self:HideDefaultNameplateAuras()
-    
-    self.timerUpdater = self:ScheduleRepeatingTimer("UpdateAllNameplateTimers", UPDATE_INTERVAL)
-
+    self:RegisterEvent("UNIT_AURA")    
     self:RegisterEvent("NAME_PLATE_UNIT_ADDED", "OnNamePlateUnitAdded")
+    self.timerUpdater = self:ScheduleRepeatingTimer("UpdateAllNameplateTimers", UPDATE_INTERVAL)
+    self:InitializeHooks()
+    self:HideDefaultNameplateAuras()
 end
 
 -- Event handler to hide the BuffFrame when nameplate is added
