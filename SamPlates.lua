@@ -1,5 +1,3 @@
--- SamPlates Addon
--- Using AceTimer for efficient timer management
 
 local AceAddon = LibStub("AceAddon-3.0")
 local SamPlates = AceAddon:NewAddon("SamPlates", "AceEvent-3.0", "AceTimer-3.0")
@@ -19,7 +17,9 @@ function SamPlates:CreateAuraIcon(parent)
     icon.texture:SetAllPoints()
     
     icon.timer = icon:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    icon.timer:SetPoint("TOP", icon, "BOTTOM", 0, -2)
+    icon.timer:SetPoint("CENTER", icon, "CENTER", 0, 0)
+    icon.timer:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE") 
+    icon.timer:SetTextColor(0, 0.75, 1)
     
     return icon
 end
@@ -28,7 +28,6 @@ end
 function SamPlates:UpdateAuraTimers(namePlateFrame)
     if not namePlateFrame or not namePlateFrame.UnitFrame then return end
     
-    -- Update debuff timers
     if namePlateFrame.debuffIcons then
         for _, icon in ipairs(namePlateFrame.debuffIcons) do
             if icon:IsShown() and icon.expirationTime then
@@ -36,6 +35,10 @@ function SamPlates:UpdateAuraTimers(namePlateFrame)
                 if remaining > 0 then
                     icon.timer:SetText(string.format("%.1f", remaining))
                     icon.timer:Show()
+                    icon.timer:SetTextColor(0, 0.75, 1)
+                    if remaining < 10 then 
+                        icon.timer:SetTextColor(1, 0, 0)
+                    end
                 else
                     icon.timer:Hide()
                 end
@@ -64,12 +67,14 @@ function SamPlates:UpdateNameplateAuras(namePlateFrame)
     -- Process Debuffs
     local debuffIndex = 1
     for i = 1, 40 do
-        local auraData = C_UnitAuras.GetDebuffDataByIndex(unit, i)
+        -- local auraData = C_UnitAuras.GetDebuffDataByIndex(unit, i)
+        local auraData = C_UnitAuras.GetAuraDataByIndex(unit, i, AuraUtil.AuraFilters.Harmful)
         if not auraData or debuffIndex > MAX_DEBUFFS then break end
         
         -- Check if the debuff was cast by the player
-        local isPlayerCast = auraData.sourceUnit == "player"
-        
+        local isPlayerCast = auraData.sourceUnit == "player" and auraData.nameplateShowPersonal
+        -- local isPlayerCast = auraData.sourceUnit == 'player' and auraData.isNameplateOnly == true
+
         if isPlayerCast then
             local icon = namePlateFrame.debuffIcons[debuffIndex] or self:CreateAuraIcon(namePlateFrame.UnitFrame)
             namePlateFrame.debuffIcons[debuffIndex] = icon
