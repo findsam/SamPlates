@@ -3,11 +3,26 @@ local AceAddon = LibStub("AceAddon-3.0")
 local SamPlates = AceAddon:NewAddon("SamPlates", "AceEvent-3.0", "AceTimer-3.0")
 
 -- Configuration
-local ICON_SIZE = 26
-local DEBUFF_ICON_OFFSET_Y = 10
+local ICON_SIZE = 46
+local DEBUFF_ICON_OFFSET_Y = -5
 local MAX_DEBUFFS = 10
 local UPDATE_INTERVAL = 0.1  -- Update timers every 0.1 seconds
     
+function SamPlates:ARENA_PREPARE_START()
+    -- Loop through all nameplates and reset debuff icons
+    for _, namePlate in ipairs(C_NamePlate.GetNamePlates()) do
+        if namePlate.UnitFrame and namePlate.UnitFrame.BuffFrame then
+            namePlate.UnitFrame.BuffFrame:Hide()
+        end
+        -- Reset debuff icons
+        if namePlate.debuffIcons then
+            for _, icon in ipairs(namePlate.debuffIcons) do
+                icon:Hide()
+            end
+        end
+    end
+end
+
 function SamPlates:ArenaNumbers(self) 
     hooksecurefunc("CompactUnitFrame_UpdateName", function(frame)
         if C_PvP.IsArena() and frame.unit and frame.unit:find("nameplate") then
@@ -26,6 +41,7 @@ end
 
 -- Create icon pool
 function SamPlates:CreateAuraIcon(parent)
+    self:HideDefaultNameplateAuras()
     local icon = CreateFrame("Frame", nil, parent)
     icon:SetSize(ICON_SIZE, ICON_SIZE)
 
@@ -34,9 +50,10 @@ function SamPlates:CreateAuraIcon(parent)
     
     icon.timer = icon:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     icon.timer:SetPoint("CENTER", icon, "CENTER", 0, 0)
-    icon.timer:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE") 
+    icon.timer:SetFont("Fonts\\FRIZQT__.TTF", 16, "OUTLINE") 
     icon.timer:SetTextColor(0, 0.75, 1)
-    
+
+    icon:SetScale(0.6)
     return icon
 end
 
@@ -51,8 +68,12 @@ function SamPlates:UpdateAuraTimers(namePlateFrame)
                     icon.timer:SetText(string.format("%.1f", remaining))
                     icon.timer:Show()
                     icon.timer:SetTextColor(0, 0.75, 1)
-                    if remaining < 5 then 
+                    if remaining >= 5 then 
+                        ActionButton_HideOverlayGlow(icon) 
+                    end
+                    if remaining <= 5 then 
                         icon.timer:SetTextColor(1, 0, 0)
+                        ActionButton_ShowOverlayGlow(icon) 
                     end
                 else
                     icon.timer:Hide()
@@ -133,6 +154,7 @@ function SamPlates:UNIT_AURA(_, unitID)
     if namePlate then
         self:UpdateNameplateAuras(namePlate)
     end
+    self:HideDefaultNameplateAuras()
 end
 
 -- Hide default nameplates on initial load
@@ -158,13 +180,10 @@ function SamPlates:OnEnable()
     self:RegisterEvent("NAME_PLATE_UNIT_ADDED")
     self:RegisterEvent("UNIT_AURA")
     
-    -- Hide default auras on login
     self:HideDefaultNameplateAuras()
     
-    -- Start periodic timer update
     self.timerUpdater = self:ScheduleRepeatingTimer("UpdateAllNameplateTimers", UPDATE_INTERVAL)
 
-    -- Add custom logic for handling BuffFrame visibility
     self:RegisterEvent("NAME_PLATE_UNIT_ADDED", "OnNamePlateUnitAdded")
 end
 
