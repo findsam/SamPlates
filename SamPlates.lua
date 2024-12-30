@@ -7,12 +7,28 @@ local ICON_SIZE = 26
 local DEBUFF_ICON_OFFSET_Y = 10
 local MAX_DEBUFFS = 10
 local UPDATE_INTERVAL = 0.1  -- Update timers every 0.1 seconds
+    
+function SamPlates:ArenaNumbers(self) 
+    hooksecurefunc("CompactUnitFrame_UpdateName", function(frame)
+        if C_PvP.IsArena() and frame.unit and frame.unit:find("nameplate") then
+            for i = 1, 5 do
+                local arenaUnit = "arena" .. i
+                if frame.name and UnitIsUnit(frame.unit, arenaUnit) then
+                    frame.name:SetText(i)
+                    frame.name:SetTextColor(0, 0.75, 1)
+                    frame.name:Show()
+                    break
+                end
+            end
+        end
+    end)
+end
 
 -- Create icon pool
 function SamPlates:CreateAuraIcon(parent)
     local icon = CreateFrame("Frame", nil, parent)
     icon:SetSize(ICON_SIZE, ICON_SIZE)
-    
+
     icon.texture = icon:CreateTexture(nil, "OVERLAY")
     icon.texture:SetAllPoints()
     
@@ -27,7 +43,6 @@ end
 -- Update timer display
 function SamPlates:UpdateAuraTimers(namePlateFrame)
     if not namePlateFrame or not namePlateFrame.UnitFrame then return end
-    
     if namePlateFrame.debuffIcons then
         for _, icon in ipairs(namePlateFrame.debuffIcons) do
             if icon:IsShown() and icon.expirationTime then
@@ -36,7 +51,7 @@ function SamPlates:UpdateAuraTimers(namePlateFrame)
                     icon.timer:SetText(string.format("%.1f", remaining))
                     icon.timer:Show()
                     icon.timer:SetTextColor(0, 0.75, 1)
-                    if remaining < 10 then 
+                    if remaining < 5 then 
                         icon.timer:SetTextColor(1, 0, 0)
                     end
                 else
@@ -139,6 +154,7 @@ end
 -- Addon initialization
 function SamPlates:OnEnable()
     -- Register events
+    self:RegisterEvent("PLAYER_LOGIN", "ArenaNumbers")
     self:RegisterEvent("NAME_PLATE_UNIT_ADDED")
     self:RegisterEvent("UNIT_AURA")
     
