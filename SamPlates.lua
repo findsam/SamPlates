@@ -31,33 +31,27 @@ function addon:BuildIcon(parent)
     local icon = CreateFrame("Frame", nil, parent)
     icon:SetSize(ICON_SIZE, ICON_SIZE)
 
-    icon.texture = icon:CreateTexture(nil, "OVERLAY")
+    icon.texture = icon:CreateTexture(nil, "ARTWORK")
     icon.texture:SetAllPoints()
 
-    icon.timer = icon:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    icon.timer:SetPoint("CENTER", icon, "CENTER", 0, 0)
-    icon.timer:SetFont("Fonts\\FRIZQT__.TTF", 18, "OUTLINE")
-    icon.timer:SetTextColor(0, 0.75, 1) 
+    -- Create cooldown frame
+    icon.cooldown = CreateFrame("Cooldown", nil, icon, "CooldownFrameTemplate")
+    icon.cooldown:SetAllPoints()
+    icon.cooldown:SetDrawEdge(true)
+    icon.cooldown:SetDrawSwipe(true)
+    icon.cooldown:SetDrawBling(false)
+    icon.cooldown:SetReverse(false)
+    
+    -- Set up the cooldown count text
+    icon.cooldown:SetHideCountdownNumbers(false)
+    icon.cooldown.Text = icon.cooldown:GetRegions()
+    if icon.cooldown.Text then
+        icon.cooldown.Text:SetFont("Fonts\\FRIZQT__.TTF", 18, "OUTLINE")
+        icon.cooldown.Text:SetTextColor(0, 0.75, 1)
+    end
 
-    icon:SetScript("OnUpdate", function(self, elapsed)
-        if not self.expirationTime then return end
-        local remaining = self.expirationTime - GetTime()
-        if remaining <= 0 then
-            self.timer:SetText("")
-            return
-        end
-        if remaining < 1 then 
-            self.timer:SetText(string.format("%.1f", remaining))
-        else 
-            self.timer:SetText(math.floor(remaining))
-        end
-        -- Change the text color to red when less than 5 seconds remaining
-        if remaining < 5 then
-            self.timer:SetTextColor(1, 0, 0) -- Red color (R: 1, G: 0, B: 0)
-        else
-            self.timer:SetTextColor(0, 0.75, 1) -- Default blue color (R: 0, G: 0.75, B: 1)
-        end
-    end)
+    -- Remove the manual timer update since we're using cooldown's built-in text
+    icon:SetScript("OnUpdate", nil)
 
     icon.anchor = CreateFrame("Frame", nil, icon)
     icon.anchor:SetPoint("CENTER", icon)
@@ -81,6 +75,9 @@ function addon:RecycleIcon(icon)
     icon:Hide()
     icon:ClearAllPoints()
     icon:SetParent(nil)
+    if icon.cooldown then
+        icon.cooldown:Clear()
+    end
     tinsert(self.iconPool, icon)
 end
 
@@ -124,11 +121,24 @@ function addon:UpdateNameplateAuras(nameplate, unit)
             
             local icon = self:GetIcon(nameplate)
             icon.texture:SetTexture(aura.icon)
-            icon.expirationTime = aura.expirationTime
+            
+            -- Set cooldown
+            if icon.cooldown and aura.duration and aura.duration > 0 then
+                icon.cooldown:SetCooldown(aura.expirationTime - aura.duration, aura.duration)
+                -- Update text color based on remaining time
+                if icon.cooldown.Text then
+                    local remaining = aura.expirationTime - GetTime()
+                    if remaining < 5 then
+                        icon.cooldown.Text:SetTextColor(1, 0, 0) -- Red for < 5 seconds
+                    else
+                        icon.cooldown.Text:SetTextColor(0, 0.75, 1) -- Default blue
+                    end
+                end
+            end
             
             local xOffset = (iconCount - 1) * ICON_SPACING
             icon:ClearAllPoints()
-            icon:SetPoint("LEFT", nameplate.UnitFrame.BuffFrame, "LEFT", xOffset,   DEBUFF_ICON_OFFSET_Y)
+            icon:SetPoint("LEFT", nameplate.UnitFrame.BuffFrame, "LEFT", xOffset, DEBUFF_ICON_OFFSET_Y)
             
             tinsert(nameplate.auraIcons, icon)
         end
@@ -137,11 +147,10 @@ function addon:UpdateNameplateAuras(nameplate, unit)
     end
 end
 
--- Event handlers
+-- Event handlers remain the same
 function addon:PLAYER_ENTERING_WORLD(event, ...)
     DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r", 'SamPlates successfully initialised.'))
 end
-
 
 function addon:NAME_PLATE_UNIT_ADDED(_, unit)
     local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
