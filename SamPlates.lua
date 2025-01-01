@@ -1,29 +1,45 @@
 local _, addon = ...
 
-local ICON_SIZE = 30
+local ICON_SIZE = 26
 local DEBUFF_ICON_OFFSET_Y = 5
 local MAX_DEBUFFS = 10
 local UPDATE_INTERVAL = 0.1 
 
 local frame = CreateFrame("Frame")
 
-function addon:DisableDefaultAuras(nameplate)
-    if nameplate and nameplate.UnitFrame then
-        local buffFrame = nameplate.UnitFrame.BuffFrame
-        local debuffFrame = nameplate.UnitFrame.DebuffFrame
-        if buffFrame and not buffFrame:IsForbidden() then
-            buffFrame:UnregisterAllEvents()
-            buffFrame:Hide()
-            buffFrame:SetScript("OnUpdate", nil)
-            buffFrame:SetAlpha(0)
+-- Consolidated aura frame management
+function addon:ManageDefaultAuras(nameplate, shouldShow)
+    if not nameplate or not nameplate.UnitFrame then return end
+    
+    local frames = {
+        nameplate.UnitFrame.BuffFrame,
+        nameplate.UnitFrame.DebuffFrame
+    }
+    
+    for _, frame in ipairs(frames) do
+        if frame and not frame:IsForbidden() then
+            if not shouldShow then
+                frame:UnregisterAllEvents()
+                frame:Hide()
+                frame:SetScript("OnUpdate", nil)
+                frame:SetAlpha(0)
+            else
+                frame:Show()
+                frame:SetAlpha(1)
+            end
         end
+    end
+end
 
-        if debuffFrame and not debuffFrame:IsForbidden() then
-            debuffFrame:UnregisterAllEvents()
-            debuffFrame:Hide()
-            debuffFrame:SetScript("OnUpdate", nil)
-            debuffFrame:SetAlpha(0)
-        end
+-- Pre-create icon pool
+addon.iconPool = {}
+local INITIAL_POOL_SIZE = 20
+
+function addon:InitializeIconPool()
+    for i = 1, INITIAL_POOL_SIZE do
+        local icon = self:BuildIcon(UIParent)
+        icon:Hide()
+        tinsert(self.iconPool, icon)
     end
 end
 
@@ -34,31 +50,24 @@ function addon:BuildIcon(parent)
     icon.texture = icon:CreateTexture(nil, "ARTWORK")
     icon.texture:SetAllPoints()
 
-    -- Create cooldown frame
     icon.cooldown = CreateFrame("Cooldown", nil, icon, "CooldownFrameTemplate")
     icon.cooldown:SetAllPoints()
     icon.cooldown:SetDrawEdge(true)
     icon.cooldown:SetDrawSwipe(true)
     icon.cooldown:SetDrawBling(false)
     icon.cooldown:SetReverse(false)
-    
-    -- Set up the cooldown count text
     icon.cooldown:SetHideCountdownNumbers(false)
+    
     icon.cooldown.Text = icon.cooldown:GetRegions()
     if icon.cooldown.Text then
         icon.cooldown.Text:SetFont("Fonts\\FRIZQT__.TTF", 18, "OUTLINE")
         icon.cooldown.Text:SetTextColor(0, 0.75, 1)
     end
 
-    -- Remove the manual timer update since we're using cooldown's built-in text
-    icon:SetScript("OnUpdate", nil)
-
     icon.anchor = CreateFrame("Frame", nil, icon)
     icon.anchor:SetPoint("CENTER", icon)
     return icon
 end
-
-addon.iconPool = {}
 
 function addon:GetIcon(parent)
     local icon = tremove(self.iconPool)
@@ -81,37 +90,22 @@ function addon:RecycleIcon(icon)
     tinsert(self.iconPool, icon)
 end
 
-function addon:HideDefaultAuras(nameplate)
-    if nameplate and nameplate.UnitFrame then
-        -- Hide default buff frame
-        if nameplate.UnitFrame.BuffFrame then
-            nameplate.UnitFrame.BuffFrame:Hide()
-        end
-        -- Hide default debuff frame
-        if nameplate.UnitFrame.DebuffFrame then
-            nameplate.UnitFrame.DebuffFrame:Hide()
-        end
-    end
-end
-
 function addon:UpdateNameplateAuras(nameplate, unit)
     if not nameplate or not unit then return end
     
-    self:HideDefaultAuras(nameplate)
+    self:ManageDefaultAuras(nameplate, false)
     
     if not nameplate.auraIcons then
         nameplate.auraIcons = {}
-    else
-        for _, icon in ipairs(nameplate.auraIcons) do
-            self:RecycleIcon(icon)
-        end
-        wipe(nameplate.auraIcons)
     end
-
-    local auraIndex = 1
+    
+    -- Track current icons to minimize hide/show operations
+    local currentIcons = {}
     local iconCount = 0
     local ICON_SPACING = ICON_SIZE + 2
     
+    -- First pass: Update existing or add new icons
+    local auraIndex = 1
     while auraIndex <= 40 and iconCount < MAX_DEBUFFS do
         local aura = C_UnitAuras.GetAuraDataByIndex(unit, auraIndex, AuraUtil.AuraFilters.Harmful)
         if not aura then break end
@@ -119,20 +113,14 @@ function addon:UpdateNameplateAuras(nameplate, unit)
         if aura.sourceUnit == "player" and aura.nameplateShowPersonal then
             iconCount = iconCount + 1
             
-            local icon = self:GetIcon(nameplate)
+            local icon = nameplate.auraIcons[iconCount] or self:GetIcon(nameplate)
             icon.texture:SetTexture(aura.icon)
             
-            -- Set cooldown
             if icon.cooldown and aura.duration and aura.duration > 0 then
                 icon.cooldown:SetCooldown(aura.expirationTime - aura.duration, aura.duration)
-                -- Update text color based on remaining time
                 if icon.cooldown.Text then
                     local remaining = aura.expirationTime - GetTime()
-                    if remaining < 5 then
-                        icon.cooldown.Text:SetTextColor(1, 0, 0) -- Red for < 5 seconds
-                    else
-                        icon.cooldown.Text:SetTextColor(0, 0.75, 1) -- Default blue
-                    end
+                    icon.cooldown.Text:SetTextColor(remaining < 5 and 1 or 0, remaining < 5 and 0 or 0.75, remaining < 5 and 0 or 1)
                 end
             end
             
@@ -140,33 +128,34 @@ function addon:UpdateNameplateAuras(nameplate, unit)
             icon:ClearAllPoints()
             icon:SetPoint("LEFT", nameplate.UnitFrame.BuffFrame, "LEFT", xOffset, DEBUFF_ICON_OFFSET_Y)
             
-            tinsert(nameplate.auraIcons, icon)
+            currentIcons[iconCount] = icon
+            nameplate.auraIcons[iconCount] = icon
         end
         
         auraIndex = auraIndex + 1
     end
+    
+    -- Clean up excess icons
+    for i = iconCount + 1, #nameplate.auraIcons do
+        self:RecycleIcon(nameplate.auraIcons[i])
+        nameplate.auraIcons[i] = nil
+    end
 end
 
--- Event handlers remain the same
-function addon:PLAYER_ENTERING_WORLD(event, ...)
-    DEFAULT_CHAT_FRAME:AddMessage(string.format("|cFF99CC33%s|r", 'SamPlates successfully initialised.'))
+-- Event handlers
+function addon:PLAYER_ENTERING_WORLD()
+    self:InitializeIconPool()
+    DEFAULT_CHAT_FRAME:AddMessage("|cFF99CC33SamPlates successfully initialised.|r")
 end
 
 function addon:NAME_PLATE_UNIT_ADDED(_, unit)
     local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
     if nameplate then
-        self:DisableDefaultAuras(nameplate)
         self:UpdateNameplateAuras(nameplate, unit)
     end
 end
 
-function addon:UNIT_AURA(_, unit)
-    local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
-    if nameplate then
-        self:DisableDefaultAuras(nameplate)
-        self:UpdateNameplateAuras(nameplate, unit)
-    end
-end
+addon.UNIT_AURA = addon.NAME_PLATE_UNIT_ADDED
 
 function addon:NAME_PLATE_UNIT_REMOVED(_, unit)
     local nameplate = C_NamePlate.GetNamePlateForUnit(unit)
